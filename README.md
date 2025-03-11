@@ -1,8 +1,5 @@
 # NudgeQueryGenApp
 
-## Overview
-NudgeQueryGenApp is a project designed to generate queries for the Nudge application. This tool helps streamline the process of creating and managing queries efficiently.
-
 ## Prerequisites
 Before installing NudgeQueryGenApp, ensure you have Node.js installed on your machine. If Node.js is not installed, follow these steps:
 
