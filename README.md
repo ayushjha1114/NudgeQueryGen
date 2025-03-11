@@ -52,7 +52,7 @@ To install the NudgeQueryGenApp, follow these steps:
 
 1. Clone the repository:
     ```bash
-    git clone https://github.com/yourusername/NudgeQueryGenApp.git
+    git clone https://github.com/ayushjha1114/NudgeQueryGenApp.git
     ```
 2. Navigate to the project directory:
     ```bash
