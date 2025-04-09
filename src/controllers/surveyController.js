@@ -1,4 +1,5 @@
 import { createPostgresClient } from '../config.js';
+import { getNextId, fetchExistdata } from '../utils/helper.js';
 
 export const surveySqlController = async (req, res) => {
     const { db_name } = req.body;
@@ -13,10 +14,61 @@ export const surveySqlController = async (req, res) => {
         console.log(`Connected to PostgreSQL database: ${db_name}`);
         const payload = req.body;
 
-        const queries = await generateSql(payload, client);
+        const { allQueries: queries, dbFetechedIds } = await generateSql(payload, client);
+
+        const {
+            surveyId,
+            sectionIdStart,
+            optionIdStart,
+            questionIdStart,
+            surveyReferenceIdStart,
+            surveySectionIdStart,
+            conditionIdStart,
+            questionOptionIdStart,
+            sectionQuestionIdStart,
+            conditionalQuestionMappingIdStart,
+            tagIdStart
+        } = dbFetechedIds;
+
+        const {
+            ticket_number,
+            survey_primary_id,
+            section_primary_id,
+            option_primary_id,
+            question_primary_id,
+            survey_reference_primary_id,
+            survey_section_primary_id,
+            conditional_question_mapping_primary_id,
+            condition_primary_id,
+            question_option_primary_id,
+            section_question_primary_id,
+            tag_primary_id,
+            attributes
+        } = payload;
+
+        const rawResponse = `
+            Ticket Number: ${ticket_number || ''}
+            
+            survey_primary_id: ${survey_primary_id ? survey_primary_id.join(', ') : surveyId}
+            section_primary_id: ${section_primary_id ? section_primary_id.join(', ') : sectionIdStart}
+            option_primary_id: ${option_primary_id ? option_primary_id.join(', ') : optionIdStart}
+            question_primary_id: ${question_primary_id ? question_primary_id.join(', ') : questionIdStart}
+            survey_reference_primary_id: ${survey_reference_primary_id ? survey_reference_primary_id.join(', ') : surveyReferenceIdStart}
+            survey_section_primary_id: ${survey_section_primary_id ? survey_section_primary_id.join(', ') : surveySectionIdStart}
+            conditional_question_mapping_primary_id: ${conditional_question_mapping_primary_id ? conditional_question_mapping_primary_id.join(', ') : conditionalQuestionMappingIdStart}
+            condition_primary_id: ${condition_primary_id ? condition_primary_id.join(', ') : conditionIdStart}
+            question_option_primary_id: ${question_option_primary_id ? question_option_primary_id.join(', ') : questionOptionIdStart}
+            section_question_primary_id: ${section_question_primary_id ? section_question_primary_id.join(', ') : sectionQuestionIdStart}
+            tag_primary_id: ${tag_primary_id ? tag_primary_id : tagIdStart}
+            attributes: ${attributes ? attributes.map(attr => attr.id).join(', ') : ''}
+
+            Generated SQL Queries:
+            ${queries}
+        `;
 
         res.type('text/plain');
-        res.status(200).send(queries);
+        // await client.end();
+        res.status(200).send(rawResponse);
     } catch (err) {
         console.error('Error:', err);
         res.status(500).json({ success: false, error: err.message });
@@ -25,58 +77,50 @@ export const surveySqlController = async (req, res) => {
 
 async function generateSql(payload, client) {
     try {
-        const { survey, section, options, questions, survey_reference_id, conditions_for, question_conditions } = payload;
-        const conditionMapWithid = [{ name: "Date of completion", id: 595 }, { name: "Date of Birth", id: 936 }];
+        const {
+            survey,
+            section,
+            options,
+            questions,
+            survey_reference_id,
+            question_conditions,
+            survey_primary_id,
+            section_primary_id,
+            option_primary_id,
+            question_primary_id,
+            survey_reference_primary_id,
+            survey_section_primary_id,
+            condition_primary_id,
+            question_option_primary_id,
+            section_question_primary_id,
+            conditional_question_mapping_primary_id,
+            tag_primary_id,
+            attributes
+        } = payload;
 
-        const surveyQuery = 'SELECT id FROM public.surveys ORDER BY id DESC LIMIT 1';
-        const sectionQuery = 'SELECT id FROM public.sections ORDER BY id DESC LIMIT 1';
-        const optionQuery = 'SELECT id FROM public.options ORDER BY id DESC LIMIT 1';
-        const questionQuery = 'SELECT id FROM public.questions ORDER BY id DESC LIMIT 1';
-        const surveyReferenceQuery = 'SELECT id FROM public.survey_reference ORDER BY id DESC LIMIT 1';
-        const surveySectionQuery = 'SELECT id FROM public.survey_section ORDER BY id DESC LIMIT 1';
-        const conditionalQuestionMappingQuery = 'SELECT id FROM public.conditional_question_mapping ORDER BY id DESC LIMIT 1';
-        const conditionQuery = 'SELECT id FROM public.conditions ORDER BY id DESC LIMIT 1';
-        const languageReferenceQuery = 'SELECT id FROM public.language_reference ORDER BY id DESC LIMIT 1';
-        const questionOptionQuery = 'SELECT id FROM public.question_options ORDER BY id DESC LIMIT 1';
-        const section_questionQuery = 'SELECT id FROM public.section_question ORDER BY id DESC LIMIT 1';
+        const surveyId = survey_primary_id && survey_primary_id[0] ? survey_primary_id[0] : await getNextId(client, 'surveys');
+        const sectionIdStart = section_primary_id && section_primary_id[0] ? section_primary_id[0] : await getNextId(client, 'sections');
+        const optionIdStart = option_primary_id && option_primary_id[0] ? option_primary_id[0] : await getNextId(client, 'options');
+        const questionIdStart = question_primary_id && question_primary_id[0] ? question_primary_id[0] : await getNextId(client, 'questions');
+        const surveyReferenceIdStart = survey_reference_primary_id
+            && survey_reference_primary_id[0]
+            ? survey_reference_primary_id[0] : await getNextId(client, 'survey_reference');
+        const surveySectionIdStart = survey_section_primary_id && survey_section_primary_id[0] ? survey_section_primary_id[0] : await getNextId(client, 'survey_section');
+        const conditionIdStart = condition_primary_id && condition_primary_id[0] ? condition_primary_id[0] : await getNextId(client, 'conditions');
+        // const languageReferenceIdStart = payload.language_reference_primary_id || await getNextId(client, 'language_reference');
+        const questionOptionIdStart = question_option_primary_id && question_option_primary_id[0] ? question_option_primary_id[0] : await getNextId(client, 'question_options');
+        const sectionQuestionIdStart = section_question_primary_id && section_question_primary_id[0] ? section_question_primary_id[0] : await getNextId(client, 'section_question');
+        const conditionalQuestionMappingIdStart = conditional_question_mapping_primary_id && conditional_question_mapping_primary_id[0] ? conditional_question_mapping_primary_id[0] : await getNextId(client, 'conditional_question_mapping');
+        const tagIdStart = tag_primary_id || await getNextId(client, 'tags');
 
-        const [
-            surveyRow,
-            sectionRow,
-            optionRow,
-            questionRow,
-            surveyReferenceRow,
-            surveySectionRow,
-            conditionalQuestionMappingRow,
-            conditionRow,
-            languageReferenceRow,
-            questionOptionRow,
-            section_questionRow
-        ] = await Promise.all([
-            client.query(surveyQuery),
-            client.query(sectionQuery),
-            client.query(optionQuery),
-            client.query(questionQuery),
-            client.query(surveyReferenceQuery),
-            client.query(surveySectionQuery),
-            client.query(conditionalQuestionMappingQuery),
-            client.query(conditionQuery),
-            client.query(languageReferenceQuery),
-            client.query(questionOptionQuery),
-            client.query(section_questionQuery)
-        ]);
-
-        const surveyId = (parseInt(surveyRow.rows[0]?.id) || 0) + 1;
-
-        const sectionIdStart = (parseInt(sectionRow.rows[0]?.id)) + 1;
-        const optionIdStart = (parseInt(optionRow.rows[0]?.id)) + 1;
-        const questionIdStart = (parseInt(questionRow.rows[0]?.id)) + 1;
-        const surveyReferenceIdStart = (parseInt(surveyReferenceRow.rows[0]?.id)) + 1;
-        const surveySectionIdStart = (parseInt(surveySectionRow.rows[0]?.id)) + 1;
-        const conditionIdStart = (parseInt(conditionRow.rows[0]?.id)) + 1;
-        const languageReferenceIdStart = (parseInt(languageReferenceRow.rows[0]?.id)) + 1;
-        const questionOptionIdStart = (parseInt(questionOptionRow.rows[0]?.id)) + 1;
-        const sectionQuestionIdStart = (parseInt(section_questionRow.rows[0]?.id)) + 1;
+        const dbFetechedIds = {
+            surveyId, sectionIdStart, optionIdStart,
+            questionIdStart, surveyReferenceIdStart,
+            surveySectionIdStart, conditionIdStart,
+            questionOptionIdStart, sectionQuestionIdStart,
+            conditionalQuestionMappingIdStart,
+            tagIdStart
+        };
 
         // for Surveys
         const surveyQueries = survey.map((surveyName, index) => {
@@ -86,15 +130,14 @@ async function generateSql(payload, client) {
                 VALUES (${surveyIdCurrent}, '${surveyName}', 1, now(), 1, now(), 1);
             `;
         });
-
         // for Sections
         const sectionArray = [];
-        const sectionQueries = section.map((sectionName, index) => {
+        const sectionQueries = section.map((sectionObj, index) => {
             const sectionIdCurrent = sectionIdStart + index;
-            sectionArray.push(sectionIdCurrent);
+            sectionArray.push({ sectionIdCurrent, section_seq: sectionObj.section_seq });
             return `
                 INSERT INTO sections (id, name, image_url, created_by, created_date, modified_by, modified_date, status)
-                VALUES (${sectionIdCurrent}, '${sectionName}', '', 1, now(), 1, now(), 1);
+                VALUES (${sectionIdCurrent}, '${sectionObj.name}', '', 1, now(), 1, now(), 1);
             `;
         });
 
@@ -102,7 +145,7 @@ async function generateSql(payload, client) {
         const optionArray = [];
         const optionQueries = options.map((option, index) => {
             const optionIdCurrent = optionIdStart + index;
-            optionArray.push(optionIdCurrent);
+            optionArray.push({ optionIdCurrent, ...option });
             return `
                 INSERT INTO options (id, name, type, image_url, created_by, created_date, modified_by, modified_date, status)
                 VALUES (${optionIdCurrent}, '${option.name}', '${option.type}', '', 1, now(), 1, now(), 1);
@@ -113,7 +156,7 @@ async function generateSql(payload, client) {
         const questionsArray = [];
         const questionQueries = questions.map((question, index) => {
             const questionIdCurrent = questionIdStart + index;
-            questionsArray.push({ id: questionIdCurrent, name: question.name });
+            questionsArray.push({ id: questionIdCurrent, ...question });
             return `
                 INSERT INTO questions (id, name, image_url, type, created_by, created_date, modified_by, modified_date, status)
                 VALUES (${questionIdCurrent}, '${question.name}', '', '${question.type}', 1, now(), 1, now(), 1);
@@ -136,48 +179,52 @@ async function generateSql(payload, client) {
             })
             return result;
         });
-        // console.log(surveyReferenceQueries.flat().join(' ,\n'));
 
         // for Survey Sections
-        let sectionIdCurrent = sectionIdStart;
-        const surveySectionQueries = surveyReferenceIdList.map((surveyRefId, index) => {
-            const surveySectionIdCurrent = surveySectionIdStart + index;
-            if (index % 2 === 0 && index !== 0) {
-                sectionIdCurrent++; // Increment section_id every two iterations
-            }
-            return `
-                INSERT INTO survey_section (id, survey_reference_id, section_id, order_no, created_by, created_date, modified_by, modified_date, status)
-                VALUES (${surveySectionIdCurrent}, ${surveyRefId + index}, ${sectionIdCurrent}, 1, 1, now(), 1, now(), 1);
-            `;
-        });
+        const surveySectionQueries = surveyReferenceIdList.map((surveyRefId, surveyRefIndex) => {
+            return sectionArray.map((sectionObj, sectionIndex) => {
+                const surveySectionIdCurrent = surveySectionIdStart + (surveyRefIndex * sectionArray.length) + sectionIndex;
+                const sectionId = sectionObj.sectionIdCurrent;
+                return `
+                    INSERT INTO survey_section (id, survey_reference_id, section_id, order_no, created_by, created_date, modified_by, modified_date, status)
+                    VALUES (${surveySectionIdCurrent}, ${surveyRefId}, ${sectionId}, 1, 1, now(), 1, now(), 1);
+                `;
+            });
+        }).flat();
 
         // for Section Questions
         let sectionQuestionQueries = [];
         let sectionQuestionId = sectionQuestionIdStart;
+        let sectionQuestionPrimaryArray = [];
         questionsArray.forEach((question, index) => {
-            sectionQuestionQueries.push(`
-                INSERT INTO section_question(
-                    id, section_id, question_id, order_number, conditional, mandatory, created_by, created_date, modified_by, modified_date, status)
-                VALUES (${sectionQuestionId}, ${sectionArray[index]}, ${question.id}, 1, false, true, 1, now(), 1, now(), 1);
-            `);
-            sectionQuestionId++;
+            sectionArray.forEach((section) => {
+                if (section.section_seq === question.section_ref && question_conditions.filter(ele => ele.name === question.name).length === 0) {
+                    const sectionId = section.sectionIdCurrent;
+                    sectionQuestionPrimaryArray.push(sectionQuestionId);
+                    sectionQuestionQueries.push(`
+                        INSERT INTO section_question(
+                            id, section_id, question_id, order_number, conditional, mandatory, created_by, created_date, modified_by, modified_date, status)
+                        VALUES (${sectionQuestionId}, ${sectionId}, ${question.id}, 1, false, true, 1, now(), 1, now(), 1);
+                    `);
+                    sectionQuestionId++;
+                }
+            });
         });
 
         // for Section Questions with conditions
         if (question_conditions && question_conditions.length > 0) {
             question_conditions.forEach((condition, conditionIndex) => {
-                if (questionsArray.filter((question) => question.name === condition.name).length > 0) {
-                    const questionIndex = questionsArray.findIndex((question) => question.name === condition.name);
-                    const sectionIdForCondition = sectionArray[questionIndex];
-                    const conditionQuestionId = conditionMapWithid.find((conditionItem) => conditionItem.name === condition.type)?.id;
-                    if (conditionQuestionId) {
-                        sectionQuestionQueries.push(`
+                let questionDetail = questionsArray.filter((question) => question.name === condition.name)
+                if (questionDetail.length > 0) {
+                    const matchingSection = sectionArray.find(section => section.section_seq === questionDetail[0]?.section_ref);
+                    const sectionIdForCondition = matchingSection ? matchingSection.sectionIdCurrent : null;
+                    sectionQuestionPrimaryArray.push(sectionQuestionId);
+                    sectionQuestionQueries.push(`
                             INSERT INTO section_question(
                             id, section_id, question_id, order_number, conditional, mandatory, created_by, created_date, modified_by, modified_date, status)
-                            VALUES (${sectionQuestionId}, ${sectionIdForCondition}, ${conditionQuestionId}, 2, false, true, 1, now(), 1, now(), 1);
+                            VALUES (${sectionQuestionId}, ${sectionIdForCondition}, ${questionDetail[0]?.id}, 1, true, true, 1, now(), 1, now(), 1);
                         `);
-                        sectionQuestionId++;
-                    }
+                    sectionQuestionId++;
                 }
             });
         }
@@ -186,64 +233,197 @@ async function generateSql(payload, client) {
         let questionOptionsQueries = [];
         let questionOptionId = questionOptionIdStart;
         questionsArray.forEach((question, index) => {
-            optionArray.forEach((optionid, optionIndex) => {
-                questionOptionsQueries.push(`
+            optionArray.forEach((option, optionIndex) => {
+                if (question.option_ref.includes(option.option_seq)) {
+                    questionOptionsQueries.push(`
                     INSERT INTO question_options(
                         id, question_id, option_id, order_no, score, conditional, created_by, created_date, modified_by, modified_date, status)
-                    VALUES (${questionOptionId}, ${question.id}, ${optionid}, ${optionIndex + 1}, 1, false, 1, now(), 1, now(), 1);
+                    VALUES (${questionOptionId}, ${question.id}, ${option.optionIdCurrent}, ${optionIndex + 1}, 1, false, 1, now(), 1, now(), 1);
                 `);
-                questionOptionId++;
+                    questionOptionId++;
+                }
             });
         });
 
         // for Conditional Question Mapping and Conditions (only if condition exists)
         let conditionalQueries = [];
         if (question_conditions && question_conditions.length > 0) {
-            const conditionalQuestionMappingIdStart = parseInt(conditionalQuestionMappingRow.rows[0]?.id) + 1;
-            question_conditions.forEach((condition, index) => {
-                const conditionalQuestionMappingId = conditionalQuestionMappingIdStart + index;
-                const conditionId = conditionIdStart + index;
-                const conditionQuestionId = conditionMapWithid.filter((conditionItem) => conditionItem.name === condition.type)[0].id;
-                const source_question_id = questionsArray.filter((question) => question.name === condition.name)[0].id;
-                conditionalQueries.push(`
-                    INSERT INTO conditional_question_mapping (id, source_question, target_question, conditionaloperator, created_by, created_date, modified_by, modified_date, status)
-                    VALUES (${conditionalQuestionMappingId}, ${source_question_id}, ${conditionQuestionId}, null, 1, now(), 1, now(), 1);
-                `);
-                conditionalQueries.push(`
-                    INSERT INTO public.conditions (id, conditional_question_mapping_id, condition, created_by, created_date, modified_by, modified_date, status)
-                    VALUES (${conditionId}, ${conditionalQuestionMappingId}, '@? = 936', 1 , now(), 1, now(), 1);
-                `);
-
-            });
+            try {
+                question_conditions.forEach((condition, index) => {
+                    const conditionalQuestionMappingId = conditionalQuestionMappingIdStart + index;
+                    const conditionId = conditionIdStart + index;
+                    const target_question_id = questionsArray.filter((question) => question.name === condition.name)[0]?.id;
+                    const source_question_id = questionsArray.filter((question) => question.name === condition.sourceQuestionName)[0]?.id;
+                    const conditionValue = optionArray.filter((option) => option.name === "Yes")[0]?.optionIdCurrent || 936;
+                    conditionalQueries.push(`
+                        INSERT INTO conditional_question_mapping (id, source_question, target_question, conditionaloperator, created_by, created_date, modified_by, modified_date, status)
+                        VALUES (${conditionalQuestionMappingId}, ${source_question_id}, ${target_question_id}, null, 1, now(), 1, now(), 1);
+                    `);
+                    conditionalQueries.push(`
+                        INSERT INTO public.conditions (id, conditional_question_mapping_id, condition, created_by, created_date, modified_by, modified_date, status)
+                        VALUES (${conditionId}, ${conditionalQuestionMappingId}, '@? = ${conditionValue}', 1 , now(), 1, now(), 1);
+                    `);
+                });
+            } catch (error) {
+                console.warn("🚀 ~question_conditions ~ error:", error)
+            }
         }
+
 
         // for Language References
         const languageReferenceQueries = [
             ...survey.map((surveyName, index) => {
                 return `
                     INSERT INTO language_reference (language_code, description, paraphrase, reference_id, reference_type, created_by, created_date, modified_by, modified_date, status)
-                    VALUES ('en', '${surveyName}', '', ${surveyId + index}, 'SURVEY', 1, now(), 1, now(), 1);
+                    VALUES 
+                    ('en', '${surveyName}', '', ${surveyId + index}, 'SURVEY', 1, now(), 1, now(), 1),
+                    ('bn_tr', '${surveyName}', '', ${surveyId + index}, 'SURVEY', 1, now(), 1, now(), 1),
+                    ('ky', '${surveyName}', '', ${surveyId + index}, 'SURVEY', 1, now(), 1, now(), 1),
+                    ('as', '${surveyName}', '', ${surveyId + index}, 'SURVEY', 1, now(), 1, now(), 1),
+                    ('be', '${surveyName}', '', ${surveyId + index}, 'SURVEY', 1, now(), 1, now(), 1),
+                    ('hi', '${surveyName}', '', ${surveyId + index}, 'SURVEY', 1, now(), 1, now(), 1),
+                    ('bn_wb', '${surveyName}', '', ${surveyId + index}, 'SURVEY', 1, now(), 1, now(), 1);
                 `;
             }),
-            ...section.map((sectionName, index) => {
+            ...section.map((sectionObj, index) => {
                 return `
                     INSERT INTO language_reference (language_code, description, paraphrase, reference_id, reference_type, created_by, created_date, modified_by, modified_date, status)
-                    VALUES ('en', '${sectionName}', '', ${sectionIdStart + index}, 'SECTION', 1, now(), 1, now(), 1);
+                    VALUES 
+                    ('en', '${sectionObj.name}', '', ${sectionIdStart + index}, 'SECTION', 1, now(), 1, now(), 1),
+                    ('bn_tr', '${sectionObj.name}', '', ${sectionIdStart + index}, 'SECTION', 1, now(), 1, now(), 1),
+                    ('ky', '${sectionObj.name}', '', ${sectionIdStart + index}, 'SECTION', 1, now(), 1, now(), 1),
+                    ('as', '${sectionObj.name}', '', ${sectionIdStart + index}, 'SECTION', 1, now(), 1, now(), 1),
+                    ('be', '${sectionObj.name}', '', ${sectionIdStart + index}, 'SECTION', 1, now(), 1, now(), 1),
+                    ('hi', '${sectionObj.name}', '', ${sectionIdStart + index}, 'SECTION', 1, now(), 1, now(), 1),
+                    ('bn_wb', '${sectionObj.name}', '', ${sectionIdStart + index}, 'SECTION', 1, now(), 1, now(), 1);
                 `;
             }),
             ...questions.map((question, index) => {
                 return `
                     INSERT INTO language_reference (language_code, description, paraphrase, reference_id, reference_type, created_by, created_date, modified_by, modified_date, status)
-                    VALUES ('en', '${question.name}', '', ${questionIdStart + index}, 'QUESTION', 1, now(), 1, now(), 1);
+                    VALUES 
+                    ('en', '${question.name}', '', ${questionIdStart + index}, 'QUESTION', 1, now(), 1, now(), 1),
+                    ('bn_tr', '${question.name}', '', ${questionIdStart + index}, 'QUESTION', 1, now(), 1, now(), 1),
+                    ('ky', '${question.name}', '', ${questionIdStart + index}, 'QUESTION', 1, now(), 1, now(), 1),
+                    ('as', '${question.name}', '', ${questionIdStart + index}, 'QUESTION', 1, now(), 1, now(), 1),
+                    ('be', '${question.name}', '', ${questionIdStart + index}, 'QUESTION', 1, now(), 1, now(), 1),
+                    ('hi', '${question.name}', '', ${questionIdStart + index}, 'QUESTION', 1, now(), 1, now(), 1),
+                    ('bn_wb', '${question.name}', '', ${questionIdStart + index}, 'QUESTION', 1, now(), 1, now(), 1);
                 `;
             }),
             ...options.map((option, index) => {
                 return `
                     INSERT INTO language_reference (language_code, description, paraphrase, reference_id, reference_type, created_by, created_date, modified_by, modified_date, status)
-                    VALUES ('en', '${option.name}', '', ${optionIdStart + index}, 'OPTION', 1, now(), 1, now(), 1);
+                    VALUES 
+                    ('en', '${option.name}', '', ${optionIdStart + index}, 'OPTION', 1, now(), 1, now(), 1),
+                    ('bn_tr', '${option.name}', '', ${optionIdStart + index}, 'OPTION', 1, now(), 1, now(), 1),
+                    ('ky', '${option.name}', '', ${optionIdStart + index}, 'OPTION', 1, now(), 1, now(), 1),
+                    ('as', '${option.name}', '', ${optionIdStart + index}, 'OPTION', 1, now(), 1, now(), 1),
+                    ('be', '${option.name}', '', ${optionIdStart + index}, 'OPTION', 1, now(), 1, now(), 1),
+                    ('hi', '${option.name}', '', ${optionIdStart + index}, 'OPTION', 1, now(), 1, now(), 1),
+                    ('bn_wb', '${option.name}', '', ${optionIdStart + index}, 'OPTION', 1, now(), 1, now(), 1);
                 `;
             })
         ];
+
+
+        // build tag hierarchy queries
+        const buildTagHierarchyQueries = ({ tag, tagArr, tagIdCurrentRef, tagIdMap }) => {
+            if (tagIdMap.has(tag.name)) return;
+
+            if (tag.parentId) {
+                buildTagHierarchyQueries({
+                    tag: tag.parentId,
+                    tagArr,
+                    tagIdCurrentRef,
+                    tagIdMap
+                });
+            }
+
+            const newTagId = tagIdCurrentRef.value++;
+            tagIdMap.set(tag.name, newTagId);
+
+            const parentId = tag.parentId ? tagIdMap.get(tag.parentId.name) : 'NULL';
+
+            tagArr.push(`
+                INSERT INTO tags (id, name, parent_id, status, created_by, created_date, modified_by, modified_date)
+                VALUES (${newTagId}, '${tag.name}', ${parentId}, 1, 1, now(), 1, now());
+            `);
+        };
+
+
+        // for tag
+        const tagsArray = [];
+        const flatTagQueries = [];
+        const tagIdMap = new Map();
+        let tagIdCurrentRef = { value: tagIdStart };
+
+        for (const question of questions) {
+            //skip if question does not have tag
+            if (!question.tag) continue;
+
+            const tag = question?.tag;
+            if (!tag?.name) continue;
+
+            const isTagExistId = await fetchExistdata(client, { table: 'tags', name: tag.name });
+            // console.warn("🚀 ~ isTagExist:", isTagExistId);
+
+            if (!isTagExistId) {
+                const resultTagArr = [];
+
+                buildTagHierarchyQueries({
+                    tag,
+                    tagArr: resultTagArr,
+                    tagIdCurrentRef,
+                    tagIdMap
+                });
+
+                flatTagQueries.push(...resultTagArr);
+                tagsArray.push({ id: tagIdMap.get(tag.name), ...tag });
+            } else {
+                tagsArray.push({ id: isTagExistId, ...tag });
+            }
+        }
+
+
+        // for tag-reference mapping
+        const tagReferenceQueries = [];
+        sectionQuestionPrimaryArray.forEach((sectionQuestionId, index) => {
+            if (tagsArray[index]) {
+                const tag = tagsArray[index];
+                // console.warn("🚀 ~ sectionQuestionPrimaryArray.forEach ~ tag:", tag)
+                tagReferenceQueries.push(`
+                INSERT INTO tag_reference (tag_id, reference_id, reference_type, created_by, created_date, modified_by, modified_date, status)
+                VALUES (${tag.id}, ${sectionQuestionId}, 'SECTION_QUESTION', 1, now(), 1, now(), 1);
+            `);
+            }
+        });
+
+        // for attribute
+        const attributeQueries = attributes && attributes.length > 0 ? attributes.map((attribute, index) => {
+            return `
+            INSERT INTO attributes (id, name, reference_type, status, created_by, created_date, modified_by, modified_date, parentId, periodicity)
+            VALUES (${attribute.id}, '${attribute.name}', '${attribute.type}', 1, 1, now(), 1, now(), 1, null, 0);
+            `;
+        }) : '';
+
+
+        // for tag attribute mapping
+        const tagAttributeMappingQueries = [];
+        tagsArray.forEach((tag) => {
+            const attribute = attributes && attributes.length > 0 ? attributes.find(attr => attr.tag === tag.name) : '';
+            if (attribute) {
+                tagAttributeMappingQueries.push(`
+                INSERT INTO tag_attribute_mapping (tag_id, attribute_id, status, created_by, created_date, modified_by, modified_date)
+                VALUES (${tag.id}, ${attribute.id}, 1, 1, now(), 1, now());
+            `);
+            }
+        });
+
+
+        // for attributeGroup
+
+        // for attribute- attributeGroup mapping if any
 
         const allQueries = [
             ...surveyQueries,
@@ -255,10 +435,14 @@ async function generateSql(payload, client) {
             ...sectionQuestionQueries,
             ...questionOptionsQueries,
             ...conditionalQueries,
-            ...languageReferenceQueries
+            ...languageReferenceQueries,
+            ...flatTagQueries,
+            ...tagReferenceQueries,
+            ...attributeQueries,
+            ...tagAttributeMappingQueries
         ].join("\n");
 
-        return allQueries;
+        return { allQueries, dbFetechedIds };
     } catch (err) {
         throw new Error(`Error in SQL queries: ${err.message}`);
     }
