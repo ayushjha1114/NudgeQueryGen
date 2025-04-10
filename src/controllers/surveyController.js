@@ -402,8 +402,8 @@ async function generateSql(payload, client) {
         // for attribute
         const attributeQueries = attributes && attributes.length > 0 ? attributes.map((attribute, index) => {
             return `
-            INSERT INTO attributes (id, name, reference_type, status, created_by, created_date, modified_by, modified_date, parentId, periodicity)
-            VALUES (${attribute.id}, '${attribute.name}', '${attribute.type}', 1, 1, now(), 1, now(), 1, null, 0);
+            INSERT INTO attributes (id, name, attribute_type, status, created_by, created_date, modified_by, modified_date, parent_id, periodicity)
+            VALUES (${attribute.id}, '${attribute.name}', '${attribute.type}', 1, 1, now(), 1, now(), null, 0);
             `;
         }) : '';
 
