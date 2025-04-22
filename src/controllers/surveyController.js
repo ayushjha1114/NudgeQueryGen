@@ -328,62 +328,80 @@ async function generateSql(payload, client) {
 
 
         // build tag hierarchy queries
-        const buildTagHierarchyQueries = ({ tag, tagArr, tagIdCurrentRef, tagIdMap }) => {
+        const buildTagHierarchyQueries = async ({ tag, tagArr, tagIdCurrentRef, tagIdMap, fetchExistdata, client }) => {
+            // Skip if tag already handled (either existing or generated)
             if (tagIdMap.has(tag.name)) return;
 
+            let parentId = 'NULL';
+
             if (tag.parentId) {
-                buildTagHierarchyQueries({
-                    tag: tag.parentId,
-                    tagArr,
-                    tagIdCurrentRef,
-                    tagIdMap
-                });
+                // First, check if parent exists in DB
+                let parentDbId = await fetchExistdata(client, { table: 'tags', name: tag.parentId.name });
+
+                // If not in DB, recurse to build its hierarchy
+                if (!parentDbId) {
+                    await buildTagHierarchyQueries({
+                        tag: tag.parentId,
+                        tagArr,
+                        tagIdCurrentRef,
+                        tagIdMap,
+                        fetchExistdata,
+                        client
+                    });
+                    parentId = tagIdMap.get(tag.parentId.name);
+                } else {
+                    tagIdMap.set(tag.parentId.name, parentDbId);
+                    parentId = parentDbId;
+                }
             }
 
-            const newTagId = tagIdCurrentRef.value++;
+            // Create new tagId if not from DB
+            let newTagId = await fetchExistdata(client, { table: 'tags', name: tag.name });
+            if (!newTagId) {
+                newTagId = tagIdCurrentRef.value++;
+                tagArr.push(`
+            INSERT INTO tags (id, name, parent_id, status, created_by, created_date, modified_by, modified_date)
+            VALUES (${newTagId}, '${tag.name}', ${parentId}, 1, 1, now(), 1, now());
+        `);
+            }
+
             tagIdMap.set(tag.name, newTagId);
-
-            const parentId = tag.parentId ? tagIdMap.get(tag.parentId.name) : 'NULL';
-
-            tagArr.push(`
-                INSERT INTO tags (id, name, parent_id, status, created_by, created_date, modified_by, modified_date)
-                VALUES (${newTagId}, '${tag.name}', ${parentId}, 1, 1, now(), 1, now());
-            `);
         };
 
-
-        // for tag
+        // for tags
         const tagsArray = [];
         const flatTagQueries = [];
         const tagIdMap = new Map();
         let tagIdCurrentRef = { value: tagIdStart };
 
         for (const question of questions) {
-            //skip if question does not have tag
-            if (!question.tag) continue;
+            if (!question?.tag?.name) continue;
 
-            const tag = question?.tag;
-            if (!tag?.name) continue;
+            const tag = question.tag;
 
-            const isTagExistId = await fetchExistdata(client, { table: 'tags', name: tag.name });
-            // console.warn("🚀 ~ isTagExist:", isTagExistId);
+            // Check if tag already exists in DB
+            let isTagExistId = await fetchExistdata(client, { table: 'tags', name: tag.name });
 
             if (!isTagExistId) {
                 const resultTagArr = [];
 
-                buildTagHierarchyQueries({
+                await buildTagHierarchyQueries({
                     tag,
                     tagArr: resultTagArr,
                     tagIdCurrentRef,
-                    tagIdMap
+                    tagIdMap,
+                    fetchExistdata,
+                    client
                 });
 
                 flatTagQueries.push(...resultTagArr);
                 tagsArray.push({ id: tagIdMap.get(tag.name), ...tag });
             } else {
+                tagIdMap.set(tag.name, isTagExistId);
                 tagsArray.push({ id: isTagExistId, ...tag });
             }
         }
+
 
 
         // for tag-reference mapping
@@ -423,7 +441,16 @@ async function generateSql(payload, client) {
 
         // for attributeGroup
 
-        // for attribute- attributeGroup mapping if any
+        // for attribute_group_mapping if any
+        const attributeGroupMappingQueries = attributes && attributes.length > 0 ? attributes.map((attribute) => {
+            if (attribute.attributeGroupId) {
+                return `
+                INSERT INTO attribute_group_mapping (attribute_group_id, attribute_id, status, created_by, created_date, modified_by, modified_date, name, group_id)
+                VALUES (${attribute.attributeGroupId}, ${attribute.id}, 1, 1, now(), 1, now(), null, null);
+                `;
+            }
+        }) : '';
+
 
         const allQueries = [
             ...surveyQueries,
@@ -439,7 +466,8 @@ async function generateSql(payload, client) {
             ...flatTagQueries,
             ...tagReferenceQueries,
             ...attributeQueries,
-            ...tagAttributeMappingQueries
+            ...tagAttributeMappingQueries,
+            ...attributeGroupMappingQueries
         ].join("\n");
 
         return { allQueries, dbFetechedIds };

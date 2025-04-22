@@ -19,7 +19,7 @@ async function getNextOrderBy(client, table) {
 async function fetchExistdata(client, {table, name}) {
     const query = `SELECT * FROM ${table} WHERE name = '${name}'`;
     const result = await client.query(query);
-    return result?.rows[0] ? parseInt(result.rows[0].id) + 1 : null;
+    return result?.rows[0] ? parseInt(result.rows[0].id): null;
 }
 
 export { getNextId, getNextOrderBy, fetchExistdata };

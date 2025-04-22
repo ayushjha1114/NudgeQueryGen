@@ -7,6 +7,11 @@ const app = express();
 
 app.use(bodyParser.json());
 
+app.use('/health-check', (req, res) => {
+  res.status(200).json({ status: 'OK' });
+}
+);
+
 app.use('/', postgresRoutes);
 app.use('/', mongoRoutes);
 
